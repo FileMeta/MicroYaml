@@ -10,6 +10,72 @@ using System.Collections;
 namespace Yaml
 {
     /// <summary>
+    /// Expresses options for MicroYaml readers
+    /// </summary>
+    class YamlReaderOptions
+    {
+        /// <summary>
+        /// Gets or sets a value indicating whether the underlying stream or TextReader should be closed
+        /// when the reader is closed. The default is false.
+        /// </summary>
+        public bool CloseInput { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the reader should ignore all input that is outside
+        /// document markers.
+        /// </summary>
+        /// <remarks>
+        /// <para>A YAML start document marker is a line containing three dashes, "---" with no other contents.
+        /// </para>
+        /// <para>A YAML end document marker is a line containing three dots, "..." with no other contents.
+        /// </para>
+        /// <para>This feature is handy when seeking YAML metadata embedded in another document such as
+        /// source code (where it would appear in a comment) or the comments section of file metadata. If this
+        /// value is true than at least one start document marker is required. If the value is false then the
+        /// document start marker is optional.
+        /// </para>
+        /// </remarks>
+        /// <example>
+        /// <code>
+        /// Some stuff to be skipped
+        /// ---
+        /// # The preceding line is the document start. This is a YAML comment.
+        /// yamlKey1: yamlValue1
+        /// yamlKey2: yamlValue2
+        /// # The following line is a document end
+        /// ...
+        /// This text will be skipped if IgnoreOutsideDocumentMarkers is set.
+        /// ---
+        /// # This is another document indicated by the preceding line
+        /// yamlKey3: yamlValue3
+        /// yamlKey4: yamlValue4
+        /// </code>
+        /// </example>
+        public bool IgnoreTextOutsideDocumentMarkers { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the reader should treat all documents in the
+        /// input file as one. Default is false.
+        /// </summary>
+        /// <remarks>
+        /// <para>A single file may have more than one YAML document, each delimited by the start
+        /// document marker, "---", and optionally by the end document marker, "...". If this value
+        /// is false, then the application must call <see cref="MicroYamlReader.MoveNextDocument"/> to
+        /// move between documents. If this value is true, then all documents will be read as if
+        /// they are one. If MergeDocuments is true and <see cref="IgnoreTextOutsideDocumentMarkers"/>
+        /// is also true then all YAML documents will be read as one while ignoring text that is
+        /// outside the document markers.
+        /// </para>
+        /// </remarks>
+        public bool MergeDocuments { get; set; }
+
+        public YamlReaderOptions Clone()
+        {
+            return (YamlReaderOptions)MemberwiseClone();
+        }
+    }
+
+    /// <summary>
     /// <para>Parses MicroYaml documents.
     /// </para>
     /// <para>MicroYaml is subset of the full YAML syntax. It consists of set of
@@ -34,13 +100,23 @@ namespace Yaml
         /// Load a collection with the contents of a MicroYaml document
         /// </summary>
         /// <param name="filename">Filename of a MicroYaml document.</param>
+        /// <param name="options">YamlReaderOptions to use when parsing. Null for default.</param>
         /// <param name="map">The collection into which the contents will be loaded.</param>
         /// <returns>The number of key-value pairs loaded into the document.</returns>
-        static public int LoadFile(String filename, ICollection<KeyValuePair<string, string>> map)
+        static public int LoadFile(String filename, YamlReaderOptions options, ICollection<KeyValuePair<string, string>> map)
         {
+            if (options == null)
+            {
+                options = new YamlReaderOptions();
+            }
+            else
+            {
+                options = options.Clone();
+                options.CloseInput = false;
+            }
             using (var reader = new StreamReader(filename, Encoding.UTF8, true))
             {
-                return Load(reader, map);
+                return Load(reader, options, map);
             }
         }
 
@@ -48,13 +124,23 @@ namespace Yaml
         /// Load a collection with the contents of a MicroYaml document
         /// </summary>
         /// <param name="doc">MicroYaml document.</param>
+        /// <param name="options">YamlReaderOptions to use when parsing. Null for default.</param>
         /// <param name="map">The collection into which the contents will be loaded.</param>
         /// <returns>The number of key-value pairs loaded into the document.</returns>
-        static public int LoadYaml(String doc, ICollection<KeyValuePair<string, string>> map)
+        static public int LoadYaml(String doc, YamlReaderOptions options, ICollection<KeyValuePair<string, string>> map)
         {
+            if (options == null)
+            {
+                options = new YamlReaderOptions();
+            }
+            else
+            {
+                options = options.Clone();
+                options.CloseInput = false;
+            }
             using (var reader = new StringReader(doc))
             {
-                return Load(reader, map);
+                return Load(reader, options, map);
             }
         }
 
@@ -62,13 +148,26 @@ namespace Yaml
         /// Load a collection with the contents of a MicroYaml document
         /// </summary>
         /// <param name="stream">A <see cref="Stream"/> loaded with a MicroYaml document.</param>
+        /// <param name="options">YamlReaderOptions to use when parsing. Null for default.</param>
         /// <param name="map">The collection into which the contents will be loaded.</param>
         /// <returns>The number of key-value pairs loaded into the document.</returns>
-        static public int Load(Stream stream, ICollection<KeyValuePair<string, string>> map)
+        static public int Load(Stream stream, YamlReaderOptions options, ICollection<KeyValuePair<string, string>> map)
         {
-            using (var reader = new StreamReader(stream, Encoding.UTF8, true))
+            if (options == null)
             {
-                return Load(reader, map);
+                options = new YamlReaderOptions();
+            }
+            else
+            {
+                options = options.Clone();
+            }
+            using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, !options.CloseInput))
+            {
+                options.CloseInput = false;
+                using (var r = new MicroYamlReader(reader, options))
+                {
+                    return r.CopyTo(map);
+                }
             }
         }
 
@@ -76,11 +175,12 @@ namespace Yaml
         /// Load a collection with the contents of a MicroYaml document
         /// </summary>
         /// <param name="reader">A <see cref="TextReader"/> loaded with a MicroYaml document.</param>
+        /// <param name="options">YamlReaderOptions to use when parsing. Null for default.</param>
         /// <param name="map">The collection into which the contents will be loaded.</param>
         /// <returns>The number of key-value pairs loaded into the document.</returns>
-        static public int Load(TextReader reader, ICollection<KeyValuePair<string, string> > map)
+        static public int Load(TextReader reader, YamlReaderOptions options, ICollection<KeyValuePair<string, string> > map)
         {
-            using (var r = new MicroYamlReader(reader))
+            using (var r = new MicroYamlReader(reader, options))
             {
                 return r.CopyTo(map);
             }
@@ -108,22 +208,28 @@ namespace Yaml
         }
 
         TextReader m_reader;
-        bool m_closeInput;
+        YamlReaderOptions m_options;
         KeyValuePair<string, string> m_current;
+        string m_immediateError;
 
         // Current Token
         TokenType m_tokenType;
         string m_token;
-        int m_indent;
 
-        public MicroYamlReader(TextReader reader, bool closeInput = false)
+        public MicroYamlReader(TextReader reader, YamlReaderOptions options = null)
         {
             m_reader = reader;
-            m_closeInput = closeInput;
+            if (options == null)
+            {
+                m_options = new YamlReaderOptions();
+            }
+            else
+            {
+                m_options = options.Clone();
+            }
             m_tokenType = TokenType.Null;
             m_token = null;
-            m_indent = 0;
-            InInit();
+            ChInit();
         }
 
         public KeyValuePair<string, string> Current
@@ -144,7 +250,7 @@ namespace Yaml
 
         public void Dispose()
         {
-            if (m_reader != null && m_closeInput)
+            if (m_reader != null && m_options.CloseInput)
             {
                 m_reader.Dispose();
             }
@@ -163,14 +269,12 @@ namespace Yaml
         /// <returns>True if successful. False if end of document.</returns>
         public bool MoveNext()
         {
-            // If beginning of stream, skip a begin document indicator.
+            ClearError();
+
+            // If beginning of stream, move to next document
             if (m_tokenType == TokenType.Null)
             {
-                ReadToken();
-                if (m_tokenType == TokenType.BeginDoc)
-                {
-                    ReadToken();
-                }
+                MoveNextDocument();
             }
 
             // Upon entry, the current token is the NEXT one to be processed and we're looking for a key.
@@ -199,8 +303,19 @@ namespace Yaml
                         key = string.Empty;
                         break;
 
-                    case TokenType.BeginDoc:
                     case TokenType.EndDoc:
+                        if (m_options.MergeDocuments)
+                        {
+                            MoveNextDocument();
+                            continue;
+                        }
+                        else
+                        {
+                            m_current = new KeyValuePair<string, string>(); // Clear the current value
+                            return false;
+                        }
+
+                    case TokenType.BeginDoc:
                     case TokenType.EOF:
                         m_current = new KeyValuePair<string, string>(); // Clear the current value
                         return false;
@@ -208,69 +323,80 @@ namespace Yaml
             }
             while (key == null);
 
-            // === Keep trying until we have obtained a value
-            string value = null;
-            do
+            // Handle Expected ValuePrefix ': '
+            if (m_tokenType != TokenType.ValuePrefix)
             {
-                switch (m_tokenType)
-                {
-                    case TokenType.Scalar:
-                        value = m_token;
-                        ReadToken();
-                        break;
-
-                    case TokenType.KeyPrefix:
-                        value = string.Empty;
-                        break;
-
-                    case TokenType.ValuePrefix:
-                        ReadToken();
-                        if (m_tokenType != TokenType.Scalar)
-                        {
-                            ReportError("Expected scalar value.");
-                        }
-                        // Loop back to process the next token
-                        break;
-
-                    case TokenType.BeginDoc:
-                    case TokenType.EndDoc:
-                    case TokenType.EOF:
-                        value = string.Empty;
-                        break;
-                }
+                ReportError("Expected value prefix ': '.");
+                m_current = new KeyValuePair<string, string>(key, string.Empty);
+                return true;
             }
-            while (value == null);
+            ReadToken();
 
-            m_current = new KeyValuePair<string, string>(key, value);
+            if (m_tokenType != TokenType.Scalar)
+            {
+                ReportError("Expected scalar.");
+                m_current = new KeyValuePair<string, string>(key, string.Empty);
+                return true;
+            }
+
+            // Return the key/value pair
+            m_current = new KeyValuePair<string, string>(key, m_token);
+            ReadToken();
             return true;
         }
 
-        public bool NextDocument()
+        public bool MoveNextDocument()
         {
+            ClearError();
+
             // Clear the current value
             m_current = new KeyValuePair<string, string>();
 
             // Read the balance of the current document
-            while (m_tokenType != TokenType.EOF && m_tokenType != TokenType.BeginDoc && m_tokenType != TokenType.EndDoc)
+            while (m_tokenType != TokenType.Null && m_tokenType != TokenType.EOF && m_tokenType != TokenType.BeginDoc && m_tokenType != TokenType.EndDoc)
             {
                 ReadToken();
             }
 
-            // If end of document, read the next token
-            if (m_tokenType == TokenType.EndDoc)
+            // Optionally skip until the next BeginDoc token
+            if (m_options.IgnoreTextOutsideDocumentMarkers && (m_tokenType == TokenType.Null || m_tokenType == TokenType.EndDoc))
+            {
+                if (!SkipUntilBeginDoc()) return false; // End of file
+            }
+
+            // If we're at the beginning of the stream, read the next token
+            else if (m_tokenType == TokenType.Null)
             {
                 ReadToken();
             }
 
-            // If not begin document there are no more documents
-            if (m_tokenType != TokenType.BeginDoc)
+            // Consume an end document token, if present
+            else if (m_tokenType == TokenType.EndDoc)
             {
-                return false;
+                ReadToken();
+                if (m_tokenType != TokenType.BeginDoc && m_tokenType != TokenType.EOF)
+                {
+                    ReportError("Unexpected text found after end document marker.");
+                    return false;
+                }
             }
 
-            // Move to the next token
-            ReadToken();
-            return true;
+            // If on a begin document token, read the next one to kick things off
+            if (m_tokenType == TokenType.BeginDoc) ReadToken();
+
+            // Return true if there's something more in the document
+            return (m_tokenType != TokenType.EOF);
+        }
+
+        /// <summary>
+        /// Gets an error that occurred on the most recent <see cref="MoveNext"/> or <see cref="MoveNextDocument"/> 
+        /// </summary>
+        /// <remarks>
+        /// Value is null if no error occurred.
+        /// </remarks>
+        public string ImmediateError
+        {
+            get { return m_immediateError; }
         }
 
         public int CopyTo(ICollection<KeyValuePair<string, string> > map)
@@ -294,7 +420,7 @@ namespace Yaml
             for (;;)
             {
                 SkipWhitespace();
-                char ch = InPeek();
+                char ch = ChPeek();
 
                 if (ch == 0)
                 {
@@ -305,26 +431,26 @@ namespace Yaml
                 else if (ch == '\n')
                 {
                     // Skip the newline and find out how far the next line is indented
-                    InRead();
-                    m_indent = 0;
-                    if (ReadMatch("---\n"))
-                    {
-                        m_tokenType = TokenType.BeginDoc;
-                        return;
-                    }
+                    ChRead();
+
                     if (ReadMatch("...\n"))
                     {
                         m_tokenType = TokenType.EndDoc;
                         return;
                     }
-                    m_indent = SkipWhitespace();
+                    else if (ReadMatch("---\n"))
+                    {
+                        m_tokenType = TokenType.BeginDoc;
+                        return;
+                    }
+
+                    SkipWhitespace();
                     continue;
                 }
 
                 else if (ch == '#')
                 {
                     // Comment
-                    InRead();
                     SkipBalanceOfLine();
                     continue;
                 }
@@ -360,14 +486,30 @@ namespace Yaml
             }
         }
 
+        private bool SkipUntilBeginDoc()
+        {
+            if (SkipUntilMatch("\n---\n"))
+            {
+                m_tokenType = TokenType.BeginDoc;
+                return true;
+            }
+            else
+            {
+                m_tokenType = TokenType.EOF;
+                return false;
+            }
+        }
+
         private void SkipBalanceOfLine()
         {
-            // Simply read to the end of the line
+            // Simply read to the end of the line (but not including EOLN
             char ch;
-            do
+            for (;;)
             {
-                ch = InRead();
-            } while (ch != '\0' && ch != '\n');
+                ch = ChPeek();
+                if (ch == '\n' || ch == '\0') break;
+                ChRead();
+            }
         }
 
         private void ReadQuoteScalar()
@@ -375,14 +517,14 @@ namespace Yaml
             // In quote scalars, line breaks are converted to spaces.
             // Leading and trailing spaces on line breaks are stripped.
             // Double-quote scalars use backslash escaping while single-quote scalars allow the quote to be doubled
-            char quoteChar = InRead();
+            char quoteChar = ChRead();
             Debug.Assert(quoteChar == '"' || quoteChar == '\'');
             bool doubleQuote = (quoteChar == '"');
             int spaceCount = 0;
             StringBuilder sb = new StringBuilder();
             for (;;)
             {
-                char ch = InRead();
+                char ch = ChRead();
                 if (ch == '\0') break; // End of file
                 if (doubleQuote && ch == '\"') break; // End quote
 
@@ -395,9 +537,9 @@ namespace Yaml
                 else if (!doubleQuote && ch == '\'')
                 {
                     // Doubled single-quotes converted to one single-quote.
-                    if (InPeek() == '\'')
+                    if (ChPeek() == '\'')
                     {
-                        InRead();
+                        ChRead();
                         sb.Append('\'');
                         spaceCount = 0;
                     }
@@ -415,9 +557,9 @@ namespace Yaml
                     if (spaceCount > 0) sb.Remove(sb.Length - spaceCount, spaceCount);
                     for (;;)
                     {
-                        ch = InPeek();
+                        ch = ChPeek();
                         if (ch != ' ' && ch != '\t') break;
-                        InRead();
+                        ChRead();
                     }
 
                     // Insert one space
@@ -443,33 +585,34 @@ namespace Yaml
 
         private void ReadBlockScalar()
         {
-            char blockChar = InRead();
+            char blockChar = ChRead();
             Debug.Assert(blockChar == '|' || blockChar == '>');
             bool fold = (blockChar == '>');
 
             // Read indent value if any
             int indent = 0;
-            if (char.IsDigit(InPeek()))
+            if (char.IsDigit(ChPeek()))
             {
-                indent = InRead() - '0';
+                indent = ChRead() - '0';
             }
 
             // Read chomp type if any
             char chomp = '\0';
-            char ch = InPeek();
+            char ch = ChPeek();
             if (ch == '-' || ch == '+')
             {
-                chomp = InRead();
+                chomp = ChRead();
             }
 
             // Skip to the end of the line. Only whitespace and comment should appear.
             SkipWhitespace();
-            ch = InPeek();
+            ch = ChPeek();
             if (ch != '#' && ch != '\n')
             {
                 ReportError("Expected comment or newline.");
             }
             SkipBalanceOfLine();
+            ChRead();   // Read the newline
 
             // If not specified, determine the indent level by the indentation of the first line
             if (indent == 0)
@@ -477,9 +620,11 @@ namespace Yaml
                 indent = SkipWhitespace();
                 if (indent == 0)
                 {
-                    ReportError("YAML: '|' should be followed by one or more indented lines.");
+                    // Empty value
+                    ChUnread('\n'); // Restore the newline to be read by the outer loop
                     m_tokenType = TokenType.Scalar;
                     m_token = string.Empty;
+                    return;
                 }
             }
 
@@ -491,7 +636,7 @@ namespace Yaml
             StringBuilder sb = new StringBuilder();
             for (;;)
             {
-                ch = InRead();
+                ch = ChRead();
                 if (ch == '\0') break;
                 if (ch == '\n')
                 {
@@ -503,9 +648,9 @@ namespace Yaml
                     int nextIndent;
                     for (nextIndent=0; nextIndent< indent; ++nextIndent)
                     {
-                        ch = InPeek();
+                        ch = ChPeek();
                         if (ch != ' ' && ch != '\t') break;
-                        InRead();
+                        ChRead();
                     }
 
                     // Scalar ends with a non-empty line that is indented less than "indent" value.
@@ -557,6 +702,8 @@ namespace Yaml
                 if (end < sb.Length) sb.Remove(end, sb.Length - end);
             }
 
+            ChUnread('\n'); // Restore the newline to be read by the outer loop
+
             // Return the result
             m_tokenType = TokenType.Scalar;
             m_token = sb.ToString();          
@@ -568,12 +715,13 @@ namespace Yaml
             var sb = new StringBuilder();
             for (;;)
             {
-                ch = InRead();
+                ch = ChRead();
                 if (ch == '\0' || ch == '\n') break; // EOF or Newline
-                if ((ch == ' ' || ch == '\t') && InPeek() == '#') break; // Comment
-                if ((ch == ':' || ch == '?') && InPeek() == ' ') break; // Key or value indicator
+                if ((ch == ' ' || ch == '\t') && ChPeek() == '#') break; // Comment
+                if ((ch == ':' || ch == '?') && ChPeek() == ' ') break; // Key or value indicator
                 sb.Append(ch);
             }
+            if (ch != '\0') ChUnread(ch);
 
             // Strip trailing whitespace
             int end;
@@ -591,7 +739,7 @@ namespace Yaml
         private char ReadEscape()
         {
             // The backslash has already been read, handle the rest.
-            char ch = InRead();
+            char ch = ChRead();
 
             switch (ch)
             {
@@ -654,7 +802,7 @@ namespace Yaml
             while (charcount > 0)
             {
                 result *= 16;
-                int ch = InPeek();
+                int ch = ChPeek();
                 if (ch >= '0' && ch <= '9')
                 {
                     result += ch - '0';
@@ -672,7 +820,7 @@ namespace Yaml
                     break;
                 }
 
-                InRead();
+                ChRead();
                 --charcount;
             }
 
@@ -686,9 +834,9 @@ namespace Yaml
             int count = 0;
             for (;;)
             {
-                char ch = InPeek();
+                char ch = ChPeek();
                 if (ch != ' ' && ch != '\t') break;
-                InRead();
+                ChRead();
                 ++count;
             }
             return count;
@@ -712,17 +860,17 @@ namespace Yaml
 
         private Stack<char> m_readBuf = new Stack<char>();
 
-        void InInit()
+        void ChInit()
         {
             m_readBuf.Clear();
             m_readBuf.Push('\n');
         }
 
-        char InPeek()
+        char ChPeek()
         {
             if (m_readBuf.Count <= 0)
             {
-                char ch = InRead();
+                char ch = ChRead();
                 if (ch == '\0') return '\0';
                 m_readBuf.Push(ch);
                 return ch;
@@ -730,7 +878,7 @@ namespace Yaml
             return m_readBuf.Peek();
         }
 
-        char InRead()
+        char ChRead()
         {
             if (m_readBuf.Count > 0)
             {
@@ -770,7 +918,7 @@ namespace Yaml
             return '\0';
         }
 
-        void InUnread(char ch)
+        void ChUnread(char ch)
         {
             Debug.Assert(ch != '\0');
             m_readBuf.Push(ch);
@@ -789,13 +937,12 @@ namespace Yaml
             int i;
             for (i=0; i<value.Length; ++i)
             {
-                if (value[i] != InPeek()) break;
-                ++i;
-                InRead();
+                if (value[i] != ChPeek()) break;
+                ChRead();
             }
 
             // Special case: newline matches EOF
-            if (i == value.Length - 1 && value[i] == '\n' && InPeek() == '\0') ++i;
+            if (i == value.Length - 1 && value[i] == '\n' && ChPeek() == '\0') ++i;
 
             if (i >= value.Length) return true;
 
@@ -803,19 +950,56 @@ namespace Yaml
             while (i > 0)
             {
                 --i;
-                InUnread(value[i]);
+                ChUnread(value[i]);
             }
             return false;
         }
 
+        /// <summary>
+        /// Skip inbound text until a matching sequence is found.
+        /// </summary>
+        /// <param name="value">The text to match.</param>
+        /// <returns>True if the value was found. Else, false and end-of-file.</returns>
+        bool SkipUntilMatch(string value)
+        {
+            int len = value.Length;
+            Debug.Assert(len > 0);
+            for (;;)
+            {
+                char ch = ChRead();
+                if (ch == '\0') return false;   // EOF
+                if (ch != value[0]) continue;   // Fast track
+
+                // See if the balance matches
+                int i;
+                for (i = 1; i < len; ++i)
+                {
+                    if (value[i] != ChPeek()) break;
+                    ChRead();
+                }
+
+                // Found it.
+                if (i >= len) return true;
+
+                // if partial match, undo all but one character read
+                while (i > 1)
+                {
+                    --i;
+                    ChUnread(value[i]);
+                }
+            }
+        }
+
         #endregion
 
-        // TODO: Set up a way to collect syntax errors for later reporting.
-        // For now, syntax errors are ignored and parsing continues.
-        [Conditional("DEBUG")]
-        private static void ReportError(string msg, params object[] args)
+        private void ClearError()
         {
-            Debug.Fail(string.Format(msg, args));
+            m_immediateError = null;
+        }
+
+        private void ReportError(string msg, params object[] args)
+        {
+            m_immediateError = string.Format(msg, args);
         }
     }
 

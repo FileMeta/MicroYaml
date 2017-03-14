@@ -20,7 +20,15 @@ namespace Yaml
         {
             try
             {
-                bool result = CoreTest(m_cTest1, m_cTest1Expected);
+                bool result;
+                //result = CoreTest(m_cTest1, m_cTest1Expected);
+                //Console.WriteLine("Tests {0}.", result ? "passed" : "failed");
+                //Console.WriteLine();
+
+                YamlReaderOptions options = new YamlReaderOptions();
+                options.IgnoreTextOutsideDocumentMarkers = true;
+                options.MergeDocuments = true;
+                result = CoreTest(m_cTest2, m_cTest2Expected, options);
                 Console.WriteLine("Tests {0}.", result ? "passed" : "failed");
             }
             catch (Exception err)
@@ -37,26 +45,30 @@ namespace Yaml
             }
         }
 
-        static bool CoreTest(string yaml, IEnumerable<KeyValuePair<string, string>> comp)
+        static bool CoreTest(string yaml, IEnumerable<KeyValuePair<string, string>> comp, YamlReaderOptions options = null)
         {
             Yaml.MicroYamlReader reader = null;
             IEnumerator<KeyValuePair<string, string>> standard = null;
             bool success = true;
             try
             {
-                reader = new MicroYamlReader(new StringReader(yaml));
+                reader = new MicroYamlReader(new StringReader(yaml), options);
                 standard = comp.GetEnumerator();
 
                 bool eofStandard = false;
                 while (reader.MoveNext())
                 {
+                    if (reader.ImmediateError != null)
+                    {
+                        ReportError(reader.ImmediateError);
+                        success = false;
+                    }
                     if (!eofStandard)
                     {
                         eofStandard = !standard.MoveNext();
                         if (eofStandard)
                         {
-                            Console.WriteLine("   Standard at EOF but still input from YAML.");
-                            Console.WriteLine();
+                            ReportError("Expected result at EOF but YAML input remains.");
                             success = false;
                         }
                     }
@@ -80,7 +92,7 @@ namespace Yaml
 
                 if (standard.MoveNext())
                 {
-                    Console.WriteLine("   YAML at EOF but still values in standard.");
+                    ReportError("YAML at EOF but still values in standard.");
                 }
 
             }
@@ -113,6 +125,15 @@ namespace Yaml
             str = str.Replace("\r", "\\r");
             str = str.Replace("\t", "\\t");
             return str;
+        }
+
+        static void ReportError(string error)
+        {
+            ConsoleColor oldColor = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("   Error: " + error);
+            Console.WriteLine();
+            Console.ForegroundColor = oldColor;
         }
 
         const string m_cTest0 = @"
@@ -178,8 +199,8 @@ literal3: |+
 
 literal4: |1-
    A numeral after the block indicator indicates the
-number of indentation characters thereby allowing the
-first of the value to have leading whitespace.
+ number of indentation characters thereby allowing the
+ first line of the value to have leading whitespace.
 
 # Folded block format is indicated by the > character
 folded1: >
@@ -271,8 +292,7 @@ Edge12: End of file.
             new KeyValuePair<string, string>("literal1", "Values in literal block format must be indented.\n\n\nNewlines are significant and preserved.\nTrailing spaces are trimmed.\n\nIndentation beyond the amount of the first line\n is also preserved.\n"),
             new KeyValuePair<string, string>("literal2", "A dash after the block indicator means to \"chomp\" the\nterminating newline in literal block format."),
             new KeyValuePair<string, string>("literal3", "A plus after the block indicator means to include the\n\nterminating newline and any subsequent blank lines.\n\n"),
-            new KeyValuePair<string, string>("literal4", "   A numeral after the block indicator indicates the"),
-            new KeyValuePair<string, string>("number of indentation characters thereby allowing the", "first of the value to have leading whitespace."),
+            new KeyValuePair<string, string>("literal4", "   A numeral after the block indicator indicates the\nnumber of indentation characters thereby allowing the\nfirst line of the value to have leading whitespace."),
             new KeyValuePair<string, string>("folded1", "In folded format, newlines are converted to spaces and trailing spaces are trimmed.\n"),
             new KeyValuePair<string, string>("folded2", "  Folded format also supports the indentation indicator and the chomping indicator."),
             new KeyValuePair<string, string>("folded3", "In folded format, a newline followed by a blank line\nresults in ONE embedded newline.\n"),
@@ -292,6 +312,56 @@ Edge12: End of file.
             new KeyValuePair<string, string>("Edge10", "Folded block with keeping followed by empty lines\n\n\n"),
             new KeyValuePair<string, string>("Edge11", "Folded block with embedded and trailing empty lines\n\nand chomping."),
             new KeyValuePair<string, string>("Edge12", "End of file.")
+        };
+
+        const string m_cTest2 = @"
+Some non-YAML Stuff
+More non-YAML stuff - to be skipped because we haven't
+yet reached the doc start marker.
+---
+# In the document now - this is a comment
+Key1: Value1
+Key2: |
+ A longer value written out
+ in literal form.
+...
+Outside the document, more stuff to be skipped.
+This line has an embedded --- three dashes.
+--- This line starts with three dashes.
+And this line ends with three ---
+---
+Key3: Value3
+#  The value should be ..., not end-of-doc
+Key4: ...
+...
+Some more out-of-document experiences.
+---
+Key5: Fife # At one point comments at the end of the document messed things up
+...
+Out
+of
+doc
+---
+Key6: |
+---
+That was an empty block value at the end of the document
+...
+Key7: Lucky Seven
+# Followed by blank lines
+
+
+...
+End of document
+";
+
+        static KeyValuePair<string, string>[] m_cTest2Expected = new KeyValuePair<string, string>[]
+        {
+            new KeyValuePair<string, string>("Key1", "Value1"),
+            new KeyValuePair<string, string>("Key2", "A longer value written out\nin literal form.\n"),
+            new KeyValuePair<string, string>("Key3", "Value3"),
+            new KeyValuePair<string, string>("Key4", "..."),
+            new KeyValuePair<string, string>("Key5", "Fife"),
+            new KeyValuePair<string, string>("Key6", "")
         };
 
     }
