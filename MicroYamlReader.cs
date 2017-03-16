@@ -303,6 +303,7 @@ namespace Yaml
                         key = string.Empty;
                         break;
 
+                    case TokenType.BeginDoc:
                     case TokenType.EndDoc:
                         if (m_options.MergeDocuments)
                         {
@@ -315,7 +316,6 @@ namespace Yaml
                             return false;
                         }
 
-                    case TokenType.BeginDoc:
                     case TokenType.EOF:
                         m_current = new KeyValuePair<string, string>(); // Clear the current value
                         return false;
@@ -430,7 +430,7 @@ namespace Yaml
 
                 else if (ch == '\n')
                 {
-                    // Skip the newline and find out how far the next line is indented
+                    // Skip the newline
                     ChRead();
 
                     if (ReadMatch("...\n"))

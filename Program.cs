@@ -16,25 +16,29 @@ namespace Yaml
 {
     class Program
     {
+        static bool m_trace = false; // Manually set to true for verbose output
+
+        static int m_successCount;
+        static int m_failureCount;
+
+        // Execute all unit tests.
         static void Main(string[] args)
         {
-            try
-            {
-                bool result;
-                //result = CoreTest(m_cTest1, m_cTest1Expected);
-                //Console.WriteLine("Tests {0}.", result ? "passed" : "failed");
-                //Console.WriteLine();
+            m_successCount = 0;
+            m_failureCount = 0;
 
-                YamlReaderOptions options = new YamlReaderOptions();
-                options.IgnoreTextOutsideDocumentMarkers = true;
-                options.MergeDocuments = true;
-                result = CoreTest(m_cTest2, m_cTest2Expected, options);
-                Console.WriteLine("Tests {0}.", result ? "passed" : "failed");
-            }
-            catch (Exception err)
+            ExecuteTest("0", m_cTest0, m_cTest0Expected, false);
+            ExecuteTest("1", m_cTest1, m_cTest1Expected, false);
+            ExecuteTest("2", m_cTest2, m_cTest2Expected, true);
+
+            if (m_failureCount == 0)
             {
-                Console.WriteLine();
-                Console.Write(err.ToString());
+                Console.WriteLine("All {0} tests passed.", m_successCount);
+            }
+            else
+            {
+                Console.WriteLine("{0} tests passed.", m_successCount);
+                Console.WriteLine("{0} tests failed.", m_failureCount);
             }
 
             if (Win32Interop.ConsoleHelper.IsSoleConsoleOwner)
@@ -45,68 +49,132 @@ namespace Yaml
             }
         }
 
-        static bool CoreTest(string yaml, IEnumerable<KeyValuePair<string, string>> comp, YamlReaderOptions options = null)
+        static bool ExecuteTest(string description, string yaml, IEnumerable<KeyValuePair<string, string>> expected, bool ignoreTextOutside = false)
         {
-            Yaml.MicroYamlReader reader = null;
-            IEnumerator<KeyValuePair<string, string>> standard = null;
+            Console.WriteLine("Peforming Test '{0}'...", description);
             bool success = true;
+            Trace("--- MergeDocs off ---");
+            if (!CompareDocWithExpected(yaml, expected, false, ignoreTextOutside)) success = false;
+            Trace("--- MergeDocs on ---");
+            if (!CompareDocWithExpected(yaml, expected, true, ignoreTextOutside)) success = false;
+            Trace("--- Iterative EOF ---");
+            if (!TestIterativeEof(yaml)) success = false;
+
+            Console.WriteLine("Test '{0}' {1}.", description, success ? "Success" : "Failure");
+            Console.WriteLine();
+
+            if (success)
+            {
+                ++m_successCount;
+            }
+            else
+            {
+                ++m_failureCount;
+            }
+
+            return success;
+        }
+
+        static bool CompareDocWithExpected(string yaml, IEnumerable<KeyValuePair<string, string>> expected, bool mergeDocs, bool ignoreTextOutside = false)
+        {
+            bool success = true;
+
+            Yaml.MicroYamlReader reader = null;
+            IEnumerator<KeyValuePair<string, string>> comp = null;
             try
             {
+                var options = new YamlReaderOptions();
+                options.MergeDocuments = mergeDocs;
+                options.IgnoreTextOutsideDocumentMarkers = ignoreTextOutside;
                 reader = new MicroYamlReader(new StringReader(yaml), options);
-                standard = comp.GetEnumerator();
+                comp = expected.GetEnumerator();
 
-                bool eofStandard = false;
-                while (reader.MoveNext())
+                bool eofComp = false;
+                for (;;)
                 {
+                    bool docHasValue = reader.MoveNext();
+
+                    bool compHasValue = false;
+                    if (!eofComp)
+                    {
+                        compHasValue = comp.MoveNext();
+                        if (mergeDocs)
+                        {
+                            while (compHasValue && comp.Current.Key == null)
+                            {
+                                compHasValue = comp.MoveNext();
+                            }
+                        }
+                        eofComp = !compHasValue;
+                    }
+
+                    if (!docHasValue)
+                    {
+                        if (!reader.MoveNextDocument())
+                        {
+                            break;
+                        }
+                        Trace("--- Document Break ---");
+                        if (compHasValue && comp.Current.Key != null)
+                        {
+                            Trace("   Unexpected document break.");
+                            success = false;
+                        }
+                        continue;
+                    }
+
+                    if (eofComp)
+                    {
+                        ReportError("Expected result at EOF but YAML input remains.");
+                        success = false;
+                    }
+
+                    Trace("(\"{0}\", \"{1}\")", EscapeString(reader.Current.Key), EscapeString(reader.Current.Value));
+
                     if (reader.ImmediateError != null)
                     {
                         ReportError(reader.ImmediateError);
                         success = false;
                     }
-                    if (!eofStandard)
-                    {
-                        eofStandard = !standard.MoveNext();
-                        if (eofStandard)
-                        {
-                            ReportError("Expected result at EOF but YAML input remains.");
-                            success = false;
-                        }
-                    }
 
-                    Console.WriteLine("(\"{0}\", \"{1}\")", EscapeString(reader.Current.Key), EscapeString(reader.Current.Value));
-
-                    if (!eofStandard)
+                    if (!eofComp)
                     {
-                        if (!string.Equals(reader.Current.Key, standard.Current.Key, StringComparison.Ordinal))
+                        if (comp.Current.Key == null)
                         {
-                            Console.WriteLine("   Keys don't match:\r\n      \"{0}\"\r\n      \"{1}\"", EscapeString(reader.Current.Key), EscapeString(standard.Current.Key));
-                            success = false;
+                            Trace("   Expected document break.");
                         }
-                        if (!string.Equals(reader.Current.Value, standard.Current.Value))
+                        else
                         {
-                            Console.WriteLine("   Values don't match:\r\n      \"{0}\"\r\n      \"{1}\"", EscapeString(reader.Current.Value), EscapeString(standard.Current.Value));
-                            success = false;
+                            if (!string.Equals(reader.Current.Key, comp.Current.Key, StringComparison.Ordinal))
+                            {
+                                Trace("   Keys don't match:\r\n      \"{0}\"\r\n      \"{1}\"", EscapeString(reader.Current.Key), EscapeString(comp.Current.Key));
+                                success = false;
+                            }
+                            if (!string.Equals(reader.Current.Value, comp.Current.Value))
+                            {
+                                Trace("   Values don't match:\r\n      \"{0}\"\r\n      \"{1}\"", EscapeString(reader.Current.Value), EscapeString(comp.Current.Value));
+                                success = false;
+                            }
                         }
                     }
                 }
 
-                if (standard.MoveNext())
+                if (comp.MoveNext())
                 {
-                    ReportError("YAML at EOF but still values in standard.");
+                    ReportError("YAML at EOF but still values in expected result.");
                 }
-
             }
             catch (Exception err)
             {
-                Console.WriteLine(err.ToString());
+                ReportError(err.ToString());
                 success = false;
             }
             finally
             {
-                if (standard != null)
+                if (comp != null)
                 {
-                    standard.Dispose();
-                    standard = null;
+                    comp.Dispose();
+                    comp = null;
                 }
                 if (reader != null)
                 {
@@ -116,6 +184,46 @@ namespace Yaml
             }
 
             return success;
+        }
+
+        // Cut the file at one character shorter until it is zero length.
+        // Each time attempt to parse using all four option permutations.
+        // This will yield numerous syntax errors but should not crash
+        // the parser.
+        static bool TestIterativeEof(string yaml)
+        {
+            try
+            {
+                YamlReaderOptions options = new YamlReaderOptions();
+                while (yaml.Length > 0)
+                {
+                    for (int i=0; i<4; ++i)
+                    {
+                        options.IgnoreTextOutsideDocumentMarkers = (i & 1) != 0;
+                        options.MergeDocuments = (i & 2) != 0;
+                        using (var reader = new MicroYamlReader(new StringReader(yaml), options))
+                        {
+                            while (reader.MoveNextDocument())
+                            {
+                                while (reader.MoveNext())
+                                {
+                                    // Do nothing
+                                    //Trace("(\"{0}\", \"{1}\")", EscapeString(reader.Current.Key), EscapeString(reader.Current.Value));
+                                }
+                            }
+                        }
+                    }
+
+                    // Sorten by one character
+                    yaml = yaml.Substring(0, yaml.Length - 1);
+                }
+            }
+            catch (Exception err)
+            {
+                ReportError(err.ToString());
+                return false;
+            }
+            return true;
         }
 
         static string EscapeString(string str)
@@ -136,18 +244,24 @@ namespace Yaml
             Console.ForegroundColor = oldColor;
         }
 
-        const string m_cTest0 = @"
-Key1: Val1
-Key2: Val2
-";
-
-        static KeyValuePair<string, string>[] m_cTest0Expected = new KeyValuePair<string, string>[]
+        static void Trace(string msg, params object[] args)
         {
-            new KeyValuePair<string, string>("Key1", "Val1"),
-            new KeyValuePair<string, string>("Key2", "Val2")
-        };
+            if (m_trace)
+            {
+                Console.WriteLine(msg, args);
+            }
+        }
 
+        #region Test 0
+        // Test 0 is an empty file
+        const string m_cTest0 = "";
+        static KeyValuePair<string, string>[] m_cTest0Expected = new KeyValuePair<string, string>[] {};
 
+        #endregion Test 0
+
+        #region Test 1
+        // Test 1 is a sample of all of the legitimate key and value formats
+        // It's also a nice example of how to compose MicroYaml documents.
         const string m_cTest1 = @"
 # This is a comment followed by a key-value pair.
 key: value
@@ -314,6 +428,11 @@ Edge12: End of file.
             new KeyValuePair<string, string>("Edge12", "End of file.")
         };
 
+        #endregion Test 1
+
+        #region Test 2
+        // Test 2 measures the ability to embed MicroYaml documents in other text
+        // and also tests the multi-document function.
         const string m_cTest2 = @"
 Some non-YAML Stuff
 More non-YAML stuff - to be skipped because we haven't
@@ -344,25 +463,39 @@ doc
 ---
 Key6: |
 ---
-That was an empty block value at the end of the document
-...
+# That was an empty block value at the end of a document
+# going right into another document
 Key7: Lucky Seven
+...
+Some between-document stuff
+And more
+---
+Key8: Ate
 # Followed by blank lines
 
 
 ...
-End of document
+End of File
 ";
 
         static KeyValuePair<string, string>[] m_cTest2Expected = new KeyValuePair<string, string>[]
         {
             new KeyValuePair<string, string>("Key1", "Value1"),
             new KeyValuePair<string, string>("Key2", "A longer value written out\nin literal form.\n"),
+            new KeyValuePair<string, string>(null, null),   // Null values indicate a document break
             new KeyValuePair<string, string>("Key3", "Value3"),
             new KeyValuePair<string, string>("Key4", "..."),
+            new KeyValuePair<string, string>(null, null),
             new KeyValuePair<string, string>("Key5", "Fife"),
-            new KeyValuePair<string, string>("Key6", "")
+            new KeyValuePair<string, string>(null, null),
+            new KeyValuePair<string, string>("Key6", ""),
+            new KeyValuePair<string, string>(null, null),
+            new KeyValuePair<string, string>("Key7", "Lucky Seven"),
+            new KeyValuePair<string, string>(null, null),
+            new KeyValuePair<string, string>("Key8", "Ate")
         };
+
+        #endregion Test 2
 
     }
 }
