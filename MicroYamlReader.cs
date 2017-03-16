@@ -79,7 +79,7 @@ namespace Yaml
     /// <para>Parses MicroYaml documents.
     /// </para>
     /// <para>MicroYaml is subset of the full YAML syntax. It consists of set of
-    /// name-value pairs or one "mapping" im YAML parlance. "Flow" syntax, which
+    /// key-value pairs or one "mapping" im YAML parlance. "Flow" syntax, which
     /// emulates JSON, is not included. Names and values are in "Simple" or "Block"
     /// format with Plain, Double-Quoted, and Single-Quoted styles.
     /// </para>

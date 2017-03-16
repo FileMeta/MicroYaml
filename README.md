@@ -30,7 +30,7 @@ these features. Those needing more structure than a simple mapping should consid
 [XML](http://www.w3.org/XML/), [JSON](http://www.json.org/) or a full YAML parser.
 
 ## Why YAML?
-AYAML is a simple and intuitive format where newlines and indentation are significant to
+YAML is a simple and intuitive format where newlines and indentation are significant to
 the parser just as they are to the writer. Most people encountering YAML can successfully
 add or edit information without needing to learn the syntax and without creating syntax
 errors.
@@ -47,7 +47,7 @@ This project consists of two source code files:
 C# project. Documentation is embedded in the file using triple-slash format.
 * **Program.cs** is a set of regression tests for the parser.
 
-Here's a sample to get you started:
+Here is sample source code to get you started:
 ```cs
 Dictionary<string, string> yamlDoc = new Dictionary<string, string>();
 var options = new Yaml.YamlReaderOptions();
@@ -59,4 +59,93 @@ using (var reader = new StreamReader("MyYamlFile.yml"))
       yamlReader.CopyTo(yamlDoc);
    }
 }
+```
+
+## Extended MicroYaml Sample
+This sample demonstrates most MicroYaml features.
+
+```yml
+# YAML comments start with a # sign
+
+# A Key is delimited from a value with a colon and a space. The space is mandatory.
+key: value
+
+# In simple format, the value is terminated with a new line.
+simple1: simple value
+simple2: simple value with ' quotes "" that are preserved literally
+simple3: All alphanumeric and many other @-!$*:?${};'""[]~()_+=~`|<> literal characters are acceptable
+simple4: simple value # A comment may follow a value. To be a comment, the # must be preceded by a space.
+simple5: A colon followed by a space delimits the value from the key.
+simple6: When embedded in a simple value, the :colon must not be followed by a space.
+
+# In the following entries, the key is in simple format while the value is in single-quote format.
+single-quote1: 'This is the value. ''Embedded single-quotes'' are doubled.'
+single-quote2: 'In single-quoted format you   
+may have line breaks. Line breaks in this format use line-folding    
+meaning that they are converted to a single space character and  
+not preserved literally.'
+
+# The following entries, the value is in double-quote format.
+double-quote1: "This a double-quote value."
+double-quote2: "Unlike single-quote values, double-quote values use \"c-style\" escaping."
+double-quote2: "Like single-quote values, double-quote   
+values may have embedded line breaks. Also like single-quote   
+values the newlines are converted into spaces
+and trailing spaces are stripped. To embed
+a literal newline, use the \n escape. To embed quotes, use the \"quote\" escape."
+double-quote3: "You may escape the \
+newline itself thereby supporting trailing spaces and\
+embedded newlines."
+double-quote4: "Hex \x7E and Unicode \u007B escapes are also supported."
+
+# Literal block format is indicated by the | character
+literal1: |
+ Values in literal block format must be indented.
+
+
+ Newlines are significant and preserved.
+ Trailing spaces are trimmed.     
+
+ Indentation beyond the amount of the first line
+  is also preserved.
+literal2: |-
+ A dash after the block indicator means to ""chomp"" the   
+ terminating newline in literal block format.
+literal3: |+
+ A plus after the block indicator means to include the
+
+ terminating newline and any subsequent blank lines.
+
+literal4: |1-
+   A numeral after the block indicator indicates the
+ number of indentation characters thereby allowing the
+ first line of the value to have leading whitespace.
+
+# Folded block format is indicated by the > character
+folded1: >
+ In folded format, newlines are converted to spaces
+ and trailing spaces are trimmed.
+folded2: >1-
+  Folded format also supports the indentation indicator
+ and the chomping indicator.
+folded3: >
+ In folded format, a newline followed by a blank line
+
+ results in ONE embedded newline.
+ While a single newline
+ is replaced with a space.
+
+# All of the preceding examples have used simple keys and
+# complex values. But keys may use all of the same formats
+# that values can.
+simple key: value
+'single quote key': value
+""double quote
+ key"": value
+|-
+ Literal block key
+: value
+>-
+ Folded block key
+: value
 ```
