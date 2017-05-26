@@ -41,12 +41,7 @@ namespace Yaml
                 Console.WriteLine("{0} tests failed.", m_failureCount);
             }
 
-            if (Win32Interop.ConsoleHelper.IsSoleConsoleOwner)
-            {
-                Console.WriteLine();
-                Console.Write("Press any key to exit.");
-                Console.ReadKey();
-            }
+            Win32Interop.ConsoleHelper.PromptAndWaitIfSoleConsole();
         }
 
         static bool ExecuteTest(string description, string yaml, IEnumerable<KeyValuePair<string, string>> expected, bool ignoreTextOutside = false)
