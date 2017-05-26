@@ -1,15 +1,20 @@
 # MicroYaml
-A simple parser for the MicroYaml dialect of the [YAML](http://www.yaml.org/) file format.
+A simple parser for the MicroYaml dialect of the [YAML](http://www.yaml.org/) file format. Distributed as a CodeBit.
 
 MicroYaml is part of the [FileMeta](http://www.filemeta.org) project because it offers a
 simple and convenient way to embed structured metadata in convenient locations such as
 comments in source code or to add custom metadata fields in the "comments" metadata field
 of formats like .mp3.
 
+## About CodeBit
+A CodeBit is a way to share common code that's lighter weight than NuGet. CodeBits are contained in one source code file. A structured comment at the beginning of the file indicates where to find the master copy so that automated tools can retrieve and update CodeBits to the latest version. For more information see http://FileMeta.org/CodeBit.html.
+
+This project is the official distribution vehicle for the **MicroYamlReader.cs** CodeBit.
+
 ## The MicroYaml Dialect
 MicroYaml is a proper subset of YAML. MicroYaml documents consist of one "mapping" or set
-of key-value pairs. Keys and values may be in "Simple" or "Block" format with "Plain",
-"Double-Quoted", and "Single-Quoted" styles.
+of key-value pairs. Keys and values may be in "Simple" or "Block" format with Plain,
+"Double-Quoted", and 'Single-Quoted' styles.
 
 Here's a sample:
 ```yml
