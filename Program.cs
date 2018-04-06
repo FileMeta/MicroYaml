@@ -7,9 +7,6 @@ Filename: Program.cs
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.IO;
 
 namespace Yaml
@@ -54,6 +51,24 @@ namespace Yaml
             if (!CompareDocWithExpected(yaml, expected, true, ignoreTextOutside)) success = false;
             Trace("--- Iterative EOF ---");
             if (!TestIterativeEof(yaml)) success = false;
+
+            // If not a multi-document test
+            if (!ignoreTextOutside)
+            {
+                // Repeat the test with document markers
+                string yamlDelimited = string.Concat("---\r\n", yaml, "...\r\n");
+                Trace("--- With document markers ---");
+                if (!CompareDocWithExpected(yamlDelimited, expected, false, true)) success = false;
+
+                // Repeat the test with simple newlines
+                Trace("--- With simple newlines ---");
+                if (!CompareDocWithExpected(yamlDelimited.Replace("\r\n", "\n"), expected, true, true)) success = false;
+
+                // Test YamlWriter
+                Trace("--- YamlWriter ---");
+                string yaml2 = MicroYaml.SaveToString(expected);
+                if (!CompareDocWithExpected(yaml2, expected, true, true)) success = false;
+            }
 
             Console.WriteLine("Test '{0}' {1}.", description, success ? "Success" : "Failure");
             Console.WriteLine();

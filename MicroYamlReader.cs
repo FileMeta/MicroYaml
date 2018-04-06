@@ -1,12 +1,12 @@
 ﻿/*
 ---
-# Metadata in MicroYaml format. See http://filemeta.org and http://schema.org
+# Metadata in MicroYaml format. See http://filemeta.org/CodeBit.html
 name: MicroYamlReader.cs
 description: MicroYaml Reader in C#
 url: https://github.com/FileMeta/MicroYaml/raw/master/MicroYamlReader.cs
-version: 1.0
+version: 1.1
 keywords: CodeBit
-dateModified: 2017-05-24
+dateModified: 2018-04-09
 copyrightHolder: Brandt Redd
 copyrightYear: 2017
 license: https://opensource.org/licenses/BSD-3-Clause
@@ -45,21 +45,20 @@ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 */
+
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.IO;
 using System.Collections;
+using System.Diagnostics;
+using System.Text;
+using System.IO;
 
 namespace Yaml
 {
     /// <summary>
     /// Expresses options for MicroYaml readers
     /// </summary>
-    class YamlReaderOptions
+    public class YamlReaderOptions
     {
         /// <summary>
         /// Gets or sets a value indicating whether the underlying stream or TextReader should be closed
@@ -135,13 +134,15 @@ namespace Yaml
     /// for those purposes. Besides, JSON may be a better choice when that complexity is
     /// needed.
     /// </para>
-    /// <para>For samples of MicroYaml documents, see https://
+    /// <para>This is a partial class. If this CodeBit is combined with the MicroYamlWriter
+    /// codebit in the same application then the MicroYaml class will include static methods
+    /// for both reading and writing MicroYaml documents.
     /// </para>
     /// <para>For details of the YAML syntax including samples, see "http://yaml.org"
     /// </para>
-    /// <para>Fore experimenting with yaml, you may try "http://yaml-online-parser.appspot.com/".</para>
+    /// <para>For experimenting with yaml, you may try "http://yaml-online-parser.appspot.com/".</para>
     /// </summary>
-    static class MicroYaml
+    public static partial class MicroYaml
     {
         /// <summary>
         /// Load a collection with the contents of a MicroYaml document
@@ -482,11 +483,13 @@ namespace Yaml
 
                     if (ReadMatch("...\n"))
                     {
+                        ChUnread('\n'); // Leave the newline for the outer loop
                         m_tokenType = TokenType.EndDoc;
                         return;
                     }
                     else if (ReadMatch("---\n"))
                     {
+                        ChUnread('\n'); // Leave the newline for the outer loop
                         m_tokenType = TokenType.BeginDoc;
                         return;
                     }
@@ -537,6 +540,7 @@ namespace Yaml
         {
             if (SkipUntilMatch("\n---\n"))
             {
+                ChUnread('\n'); // Leave the newline for the outer loop
                 m_tokenType = TokenType.BeginDoc;
                 return true;
             }
